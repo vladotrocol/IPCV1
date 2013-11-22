@@ -18,7 +18,7 @@ int batch = 1;
 /** Function Headers */
 void detectAndDisplay(Mat frame, string s);
 void haarDetect(Mat frame, string s);
-void haarCircles(Mat frame, string s);
+void houghCircles(Mat frame, string s);
 void detectLines(Mat frame, string s);
 void surfDetect(Mat frame, string s);
 void detectContours(Mat frame, string s);
@@ -28,6 +28,12 @@ void detectContours(Mat frame, string s);
 //Haar Globals
 String cascade_name = "dartcascade.xml";
 CascadeClassifier cascade;
+
+vector<Vec3f> circles;//Stores detected circles
+vector<Rect> obj; //Stores detected objects
+
+Mat gaussian_frame;
+Mat result;
 
 //Convert int to string
 string int_to_string(int i){
@@ -39,38 +45,94 @@ string int_to_string(int i){
 
 
 
-/**
- * @function Hist_and_Backproj
- * @brief Callback to Trackbar
- */
-void Hist_and_Backproj(int, void* )
-{
-  MatND hist;
-  int histSize = MAX( bins, 2 );
-  float hue_range[] = { 0, 180 };
-  const float* ranges = { hue_range };
+// /**
+//  * @function Hist_and_Backproj
+//  * @brief Callback to Trackbar
+//  */
+// void Hist_and_Backproj(int, void* )
+// {
+//   MatND hist;
+//   int histSize = MAX( bins, 2 );
+//   float hue_range[] = { 0, 180 };
+//   const float* ranges = { hue_range };
 
-  /// Get the Histogram and normalize it
-  calcHist( &hue, 1, 0, Mat(), hist, 1, &histSize, &ranges, true, false );
-  normalize( hist, hist, 0, 255, NORM_MINMAX, -1, Mat() );
+//   /// Get the Histogram and normalize it
+//   calcHist( &hue, 1, 0, Mat(), hist, 1, &histSize, &ranges, true, false );
+//   normalize( hist, hist, 0, 255, NORM_MINMAX, -1, Mat() );
 
-  /// Get Backprojection
-  MatND backproj;
-  calcBackProject( &hue, 1, 0, hist, backproj, &ranges, 1, true );
+//   /// Get Backprojection
+//   MatND backproj;
+//   calcBackProject( &hue, 1, 0, hist, backproj, &ranges, 1, true );
 
-  /// Draw the backproj
-  imshow( "BackProj", backproj );
+//   /// Draw the backproj
+//   imshow( "BackProj", backproj );
 
-  /// Draw the histogram
-  int w = 400; int h = 400;
-  int bin_w = cvRound( (double) w / histSize );
-  Mat histImg = Mat::zeros( w, h, CV_8UC3 );
+//   /// Draw the histogram
+//   int w = 400; int h = 400;
+//   int bin_w = cvRound( (double) w / histSize );
+//   Mat histImg = Mat::zeros( w, h, CV_8UC3 );
 
-  for( int i = 0; i < bins; i ++ )
-     { rectangle( histImg, Point( i*bin_w, h ), Point( (i+1)*bin_w, h - cvRound( hist.at<float>(i)*h/255.0 ) ), Scalar( 0, 0, 255 ), -1 ); }
+//   for( int i = 0; i < bins; i ++ )
+//      { rectangle( histImg, Point( i*bin_w, h ), Point( (i+1)*bin_w, h - cvRound( hist.at<float>(i)*h/255.0 ) ), Scalar( 0, 0, 255 ), -1 ); }
 
-  imshow( "Histogram", histImg );
-}
+//   imshow( "Histogram", histImg );
+// }
+
+
+
+
+
+Mat genGauss(float sigma, int gaussSize){
+
+    // float r[frame.rows][frame.cols];
+    // Mat m = Mat::zeros(frame.rows, frame.cols, CV_8U) ;
+    // float min=10000, max=-10000;
+    // for(int i=0;i<frame.rows;i++){
+    //   for(int j=0;j<frame.cols;j++){
+    //       r[i][j] = 200;
+    //       if(r[i][j]<min){
+    //         min = r[i][j];
+    //       }
+    //       if(r[i][j]>max){
+    //         max = r[i][j];
+    //       }
+    //   }
+    // }
+    // for(int i=0;i<frame.rows;i++){
+    //   for(int j=0;j<frame.cols;j++){
+    //       m.at<uchar>(i,j) = (r[i][j])/(max) *255;
+    //   }
+    // }
+     
+
+    Mat kernelX = getGaussianKernel(gaussSize, sigma, CV_32F);
+    Mat kernelY = getGaussianKernel(gaussSize, sigma, CV_32F);
+    Mat kernelXY = kernelX*kernelY.t();
+    return kernelXY;
+    // float min=10000, max=-10000;
+    // for(int i=0;i<kernelXY.rows;i++){
+    //   for(int j=0;j<kernelXY.cols;j++){
+    //     if(kernelXY.at<float>(i,j)<min){
+    //         min = kernelXY.at<float>(i,j);
+    //       }
+    //       if(kernelXY.at<float>(i,j)>max){
+    //         max = kernelXY.at<float>(i,j);
+    //       }
+    //   }
+      
+    // }
+
+//     Mat l = Mat::zeros(200, 200, CV_8U) ;
+//      for(int i=0;i<kernelXY.rows;i++){
+//       for(int j=0;j<kernelXY.cols;j++){
+//         //kernelXY.at<float>(i,j)-=min;
+//         l.at<uchar>(i,j) = ((kernelXY.at<float>(i,j)-min)/(max-min))*255;
+//       }
+//     }
+
+// imshow("ahha", l);
+
+};
 
 
 
@@ -175,12 +237,7 @@ void detectLines(Mat frame, string s){
   //Check for intersection
   //If intersection#>3/4/5 remove them and repeat
 
-  int count;
-  for(int i=0;i<lines.size();i++){
-    for(int j=0;j<4;j++){
 
-    }
-  }
 
   for( size_t i = 0; i < lines.size(); i++ ){
     Vec4i l = lines[i];
@@ -217,7 +274,7 @@ void detectContours(Mat frame, string s){
   drawing = frame.clone();
   for( int i = 0; i< contours.size(); i++ ){
     approxPolyDP( Mat(contours[i]), contours_poly[i], 3, true );
-    if(contours_poly[i].size()<6&&contours_poly[i].size()>2){
+    if(contours_poly[i].size()==3){
       line(drawing, contours_poly[i][0], contours_poly[i][1], cvScalar(255,0,0),4);
       line(drawing, contours_poly[i][1], contours_poly[i][2], cvScalar(255,0,0),4);
       line(drawing, contours_poly[i][2], contours_poly[i][0], cvScalar(255,0,0),4);
@@ -228,13 +285,14 @@ void detectContours(Mat frame, string s){
 };
 
 //Detect circles using haar transform
-void haarCircles(Mat frame , string s){
-  vector<Vec3f> circles;//Stores detected circles
+void houghCircles(Mat frame , string s){
+ 
   
   //Apply preprocessing
   Mat frame_gray;
   cvtColor( frame, frame_gray, CV_BGR2GRAY );
   equalizeHist( frame_gray, frame_gray );
+  //imshow("equi", frame_gray);
   GaussianBlur( frame_gray, frame_gray, Size(9, 9), 2, 2 );
 
   // Apply the Hough Transform to find the circles
@@ -254,13 +312,13 @@ void haarCircles(Mat frame , string s){
   }
 
   //Display results
-  imshow((string)"dartHC",frame_tmp);
+  imshow((string)"dartCH",frame_tmp);
 };
 
 
 //Apply haar features detection
 void haarDetect( Mat frame , string s){
-  std::vector<Rect> obj; //Stores detected objects
+ 
   
   //Apply preprocessing
   Mat frame_gray;
@@ -270,7 +328,7 @@ void haarDetect( Mat frame , string s){
   //imshow("Equalized Gray", frame_gray);
 
   //Apply cascade detection
-  cascade.detectMultiScale( frame_gray, obj, 1.1, 1, 0|CV_HAAR_SCALE_IMAGE, Size(50, 50), Size(500,500) );
+  cascade.detectMultiScale( frame_gray, obj, 1.01, 2, 0|CV_HAAR_SCALE_IMAGE, Size(50, 50), Size(500,500) );
 
   //Draw the detected features
   Mat frame_tmp =frame.clone(); //make a copy of the original
@@ -287,21 +345,68 @@ void haarDetect( Mat frame , string s){
 
 //Apply all detections and display all
 void detectAndDisplay( Mat frame , string s){
+  //matrix to store the final picture with gaussians
+  Mat resulM = Mat::zeros(frame.rows, frame.cols, CV_32F) ;
+  Mat resulC = Mat::zeros(frame.rows, frame.cols, CV_32F) ;
   //Show Haar object detection
-//  haarDetect(frame, s);
+  haarDetect(frame, s);
   //Haar transform
-//  haarCircles(frame, s);
+ // houghCircles(frame, s);
   //Find contours
-//  detectContours(frame,s);
+  //detectContours(frame,s);
   //Detect lines
-  detectLines(frame, s);
+  //detectLines(frame, s);
   //SURF
-//  surfDetect(frame, s);
+ // surfDetect(frame, s);
+  for(int i = 0; i < obj.size(); i++){ 
+   result = genGauss(20,obj[i].width);
+   for(int j = 0; j < result.rows; j++ ){
+    for(int k = 0; k < result.cols; k++ ){
+      int y = obj[i].x + obj[i].width/2;
+      int x = obj[i].y + obj[i].height/2;
+
+      if(x-obj[i].width/2+j > 0 && y-obj[i].width/2+k > 0 && x-obj[i].width/2+j< frame.rows && y-obj[i].width/2+k < frame.cols)
+
+       resulM.at<float>(x-obj[i].width/2+j,y-obj[i].width/2+k)=max(result.at<float>(j,k), resulM.at<float>(x-obj[i].width/2+j,y-obj[i].width/2+k));
+
+    }
+   }
+  }
+
+
+// ///////////////////////////////////// Normalisation
+
+    float min=10000, max=-10000;
+    for(int i=0;i<resulM.rows;i++){
+      for(int j=0;j<resulM.cols;j++){
+        if(resulM.at<float>(i,j)<min){
+            min = resulM.at<float>(i,j);
+          }
+          if(resulM.at<float>(i,j)>max){
+            max = resulM.at<float>(i,j);
+          }
+      }
+      
+    }
+
+    Mat l = Mat::zeros(resulM.rows, resulM.cols, CV_8U) ;
+     for(int i=0;i<resulM.rows;i++){
+      for(int j=0;j<resulM.cols;j++){
+        //resulM.at<float>(i,j)-=min;
+        l.at<uchar>(i,j) = ((resulM.at<float>(i,j)-min)/(max-min))*255;
+      }
+    }
+
+ imshow("resultM", l);
+//////////////////////////////////////////////////////////////////
+
+
 };
 
 
 int main( int argc, const char** argv )
 { 
+
   for(int i=0;i<12;i++){
     
     string s  = int_to_string(i); //current image index
