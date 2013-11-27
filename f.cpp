@@ -26,13 +26,13 @@ void surfDetect(Mat frame);
 void detectContours(Mat frame);
 
 //--------Helpers-----------------
-Mat add_matrix(Mat m1, Mat m2);
+Mat add_matrix(Mat m1, Mat m2, float w1, float w2);
 string int_to_string(int i);
 Mat genGauss(float sigma, int gaussSize);
 vector<Point2f> convert_faces_to_points(void);
 vector<Point2f> convert_circles_to_points(void);
 vector<Point2f> compute_intersection_points(void);
-Mat assign_gauss(vector<Point2f> points, int width, int height);
+Mat assign_gauss(vector<Point2f> points, int width, int height, int radius);
 void normalize_display(Mat src, string name);
 Point2f intersection(Point2f o1, Point2f p1, Point2f o2, Point2f p2);
 float dist(float x1, float y1, float x2, float y2);
@@ -41,7 +41,8 @@ Mat assign_gauss_lines(vector<Point2f> points, int width, int height);
 Mat apply_thresh_int(Mat src, float thresh);
 vector<Point2f> get_thresh_pos(Mat src);
 void draw_features(vector<Point2f> points, Mat frame);
-
+float get_radius(Point2f c);
+Mat normalize(Mat src);
 /** Global variables */
 
 //---------Haar Globals-----------
@@ -55,7 +56,7 @@ vector<Vec4i> lines; //Stores results
 
 int main( int argc, const char** argv ){ 
     char input;
-    for(int i=0;i<12;i++){
+    for(int i=0;i<16;i++){
     
     string s  = int_to_string(i); //current image index
 
@@ -85,30 +86,32 @@ int main( int argc, const char** argv ){
 void detectAndDisplay(Mat frame){
     haarDetect(frame);
     vector<Point2f> faces_pos = convert_faces_to_points();
-    Mat haar_gauss = assign_gauss(faces_pos, frame.cols, frame.rows);
-    //normalize_display(haar_gauss, "haar_gauss");
+    Mat haar_gauss = assign_gauss(faces_pos, frame.cols, frame.rows, 125);
+    normalize_display(haar_gauss, "haar_gauss");
     houghCircles(frame);
     vector<Point2f> circles_pos = convert_circles_to_points();
-    Mat hough_circles_gauss = assign_gauss(circles_pos, frame.cols, frame.rows);
-    //normalize_display(hough_circles_gauss, "hough_circles_gauss");
+    Mat hough_circles_gauss = assign_gauss(circles_pos, frame.cols, frame.rows, 125);
+    normalize_display(hough_circles_gauss, "hough_circles_gauss");
     houghLines(frame);
     vector<Point2f> lines_pos = compute_intersection_points();
     //display_intersections(lines_pos, frame.cols, frame.rows);
     Mat intersection_gauss = assign_gauss_lines(lines_pos, frame.cols, frame.rows);
     //normalize_display(intersection_gauss, "intersection_gauss");
     Mat thresholded_int = apply_thresh_int(intersection_gauss, 240);
-    //imshow("th",thresholded_int);
+    imshow("th",thresholded_int);
     vector<Point2f> tresh_pos = get_thresh_pos(thresholded_int);
-    Mat gauss_thesh_pos = assign_gauss(tresh_pos, frame.cols, frame.rows);
+    Mat gauss_thesh_pos = assign_gauss(tresh_pos, frame.cols, frame.rows, 125);
     //normalize_display(gauss_thesh_pos, "gaus_pos");
     Mat res1, res2;
-    res1 = add_matrix(haar_gauss, hough_circles_gauss);
-    res2 = add_matrix(res1, gauss_thesh_pos);
-    //normalize_display(res2, "FINAL");
+    Mat haar_gauss_norm = normalize(haar_gauss);
+    Mat hough_circles_gauss_norm = normalize(hough_circles_gauss);
+    Mat gauss_thesh_pos_norm = normalize(gauss_thesh_pos);
+    res1 = add_matrix(haar_gauss_norm, hough_circles_gauss_norm, 1, 1);
+    res2 = add_matrix(res1, gauss_thesh_pos_norm, 1, 1);
+    normalize_display(res2, "FINAL");
     Mat thresh_final = apply_thresh_int(res2, 240);
-    //imshow("TheshFinal", thresh_final);
+    imshow("TheshFinal", thresh_final);
     vector<Point2f> final_tresh_pos = get_thresh_pos(thresh_final);
-    
     draw_features(final_tresh_pos, frame);
 
     //detectContours(frame);
@@ -118,19 +121,65 @@ void detectAndDisplay(Mat frame){
 
 
 //--------------------------------HELPERS-----------------------------
+Mat normalize(Mat src){
+    float minimum=10000, maximum=-10000;
+    for(int i=0;i<src.rows;i++){
+        for(int j=0;j<src.cols;j++){
+            if(src.at<float>(i,j)<minimum){
+                minimum = src.at<float>(i,j);
+            }
+            if(src.at<float>(i,j)>maximum){
+                maximum = src.at<float>(i,j);
+            }
+        }    
+    }
+
+    Mat m = Mat::zeros(src.rows, src.cols, CV_32F);
+    for(int i=0;i<src.rows;i++){
+        for(int j=0;j<src.cols;j++){
+            src.at<float>(i,j)-=minimum;
+            m.at<float>(i,j) = ((src.at<float>(i,j)-minimum)/(maximum-minimum))*255;
+        }
+    }
+    return m;
+};
+
+
 void draw_features(vector<Point2f> points, Mat frame){
     for(int i=0;i<points.size();i++){
-       circle(frame, Point2f(points[i].y, points[i].x), 100, Scalar(0,0,255), 3, 8, 0 ); 
+        circle(frame, Point2f(points[i].y, points[i].x), get_radius(points[i]), Scalar(0,0,255), 3, 8, 0 );
+        //cout<<get_radius(points[i])<<"\n";
+    }
+    for(int i=0;i<faces.size();i++){
+    rectangle(frame, Point(faces[i].x, faces[i].y), 
+            Point(faces[i].x + faces[i].width, faces[i].y + faces[i].height), Scalar( 0, 255, 0 ), 2);
     }
     imshow("DETECTED", frame);
 };
 
+float get_radius(Point2f c){
+    float max_radius = -10000;
+    for(int i=0;i<faces.size();i++){
+        if(dist(faces[i].y+faces[i].height/2, faces[i].x+faces[i].width/2, c.x, c.y)<50){
+            if(faces[i].width/2>max_radius)
+                max_radius = faces[i].width/2;
+            
+        }
+    }
+    if(max_radius>0){
+        return max_radius;
+    }
+    else{
+        return 100;
+    }
+};
 
-Mat add_matrix(Mat m1, Mat m2){
+
+Mat add_matrix(Mat m1, Mat m2, float w1, float w2){
     Mat m3 = Mat::zeros(m1.rows, m1.cols, CV_32F);
     for(int i =0; i<m1.rows; i++){
         for(int j=0; j<m1.cols; j++){
-            m3.at<float>(i,j) = m1.at<float>(i,j) + m2.at<float>(i,j);
+            m3.at<float>(i,j) = m1.at<float>(i,j)*w1 + m2.at<float>(i,j)*w2;
         }
     }
     return m3;
@@ -257,12 +306,12 @@ vector<Point2f> compute_intersection_points(){
     return iPoints;
 };
 
-Mat assign_gauss(vector<Point2f> points, int width, int height){
+Mat assign_gauss(vector<Point2f> points, int width, int height, int size){
     Mat r = Mat::zeros(height, width, CV_32F);
     Mat g;
-    int g_r = 125;
+    int g_r = size;
     for(int i=0;i<points.size();i++){
-        g = genGauss(30,g_r*2);
+        g = genGauss(6*g_r/25,g_r*2);
         int x = points[i].x;
         int y = points[i].y;
         for(int j = 0; j < g.rows; j++){
@@ -428,7 +477,7 @@ void houghLines(Mat frame){
 
   //Preprocessing
   Mat canny_output, frame_gray;
-  Canny(frame, canny_output, 60, 180, 3);
+  Canny(frame, canny_output, 50, 150, 3);
   cvtColor(canny_output, frame_gray, CV_GRAY2BGR);
 
   //Apply transform
