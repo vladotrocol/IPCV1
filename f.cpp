@@ -26,6 +26,7 @@ void surfDetect(Mat frame);
 void detectContours(Mat frame);
 
 //--------Helpers-----------------
+Mat add_matrix(Mat m1, Mat m2);
 string int_to_string(int i);
 Mat genGauss(float sigma, int gaussSize);
 vector<Point2f> convert_faces_to_points(void);
@@ -39,6 +40,7 @@ void display_intersections(vector<Point2f> points, int width, int height);
 Mat assign_gauss_lines(vector<Point2f> points, int width, int height);
 Mat apply_thresh_int(Mat src, float thresh);
 vector<Point2f> get_thresh_pos(Mat src);
+void draw_features(vector<Point2f> points, Mat frame);
 
 /** Global variables */
 
@@ -63,7 +65,7 @@ int main( int argc, const char** argv ){
     if( !cascade.load( cascade_name ) ){ printf("--(!)Error loading\n"); return -1; };
     
     //Show source
-    imshow((string)"dart",frame);
+    //imshow((string)"dart",frame);
     
     //Apply detection and display results
     detectAndDisplay(frame);
@@ -81,30 +83,59 @@ int main( int argc, const char** argv ){
 
 //Apply all detections and display all
 void detectAndDisplay(Mat frame){
-    // haarDetect(frame);
-    // vector<Point2f> faces_pos = convert_faces_to_points();
-    // Mat haar_gauss = assign_gauss(faces_pos, frame.cols, frame.rows);
-    // normalize_display(haar_gauss, "haar_gauss");
-    // houghCircles(frame);
-    // vector<Point2f> circles_pos = convert_circles_to_points();
-    // Mat hough_circles_gauss = assign_gauss(circles_pos, frame.cols, frame.rows);
-    // normalize_display(hough_circles_gauss, "hough_circles_gauss");
+    haarDetect(frame);
+    vector<Point2f> faces_pos = convert_faces_to_points();
+    Mat haar_gauss = assign_gauss(faces_pos, frame.cols, frame.rows);
+    //normalize_display(haar_gauss, "haar_gauss");
+    houghCircles(frame);
+    vector<Point2f> circles_pos = convert_circles_to_points();
+    Mat hough_circles_gauss = assign_gauss(circles_pos, frame.cols, frame.rows);
+    //normalize_display(hough_circles_gauss, "hough_circles_gauss");
     houghLines(frame);
     vector<Point2f> lines_pos = compute_intersection_points();
-    display_intersections(lines_pos, frame.cols, frame.rows);
+    //display_intersections(lines_pos, frame.cols, frame.rows);
     Mat intersection_gauss = assign_gauss_lines(lines_pos, frame.cols, frame.rows);
-    normalize_display(intersection_gauss, "intersection_gauss");
+    //normalize_display(intersection_gauss, "intersection_gauss");
     Mat thresholded_int = apply_thresh_int(intersection_gauss, 240);
-    imshow("th",thresholded_int);
+    //imshow("th",thresholded_int);
     vector<Point2f> tresh_pos = get_thresh_pos(thresholded_int);
     Mat gauss_thesh_pos = assign_gauss(tresh_pos, frame.cols, frame.rows);
-    normalize_display(gauss_thesh_pos, "gaus_pos");
+    //normalize_display(gauss_thesh_pos, "gaus_pos");
+    Mat res1, res2;
+    res1 = add_matrix(haar_gauss, hough_circles_gauss);
+    res2 = add_matrix(res1, gauss_thesh_pos);
+    //normalize_display(res2, "FINAL");
+    Mat thresh_final = apply_thresh_int(res2, 240);
+    //imshow("TheshFinal", thresh_final);
+    vector<Point2f> final_tresh_pos = get_thresh_pos(thresh_final);
+    
+    draw_features(final_tresh_pos, frame);
+
     //detectContours(frame);
     //surfDetect(frame);
+
 };
 
 
 //--------------------------------HELPERS-----------------------------
+void draw_features(vector<Point2f> points, Mat frame){
+    for(int i=0;i<points.size();i++){
+       circle(frame, Point2f(points[i].y, points[i].x), 100, Scalar(0,0,255), 3, 8, 0 ); 
+    }
+    imshow("DETECTED", frame);
+};
+
+
+Mat add_matrix(Mat m1, Mat m2){
+    Mat m3 = Mat::zeros(m1.rows, m1.cols, CV_32F);
+    for(int i =0; i<m1.rows; i++){
+        for(int j=0; j<m1.cols; j++){
+            m3.at<float>(i,j) = m1.at<float>(i,j) + m2.at<float>(i,j);
+        }
+    }
+    return m3;
+}
+
 //Convert int to string
 string int_to_string(int i){
     std::ostringstream oss;
@@ -240,8 +271,8 @@ Mat assign_gauss(vector<Point2f> points, int width, int height){
                     y-g_r+k > 0 &&
                     x-g_r+j< height && 
                     y-g_r+k < width){
-                        r.at<float>(x-g_r+j,y-g_r+k)= 
-                            max(g.at<float>(j,k), r.at<float>(x-g_r+j,y-g_r+k));
+                        r.at<float>(x-g_r+j,y-g_r+k)+= 
+                            g.at<float>(j,k);
                 }
             }
         }
@@ -358,7 +389,7 @@ void haarDetect(Mat frame){
   }
 
   //Display results
-  imshow((string)"dartH",frame_tmp);
+  //imshow((string)"dartH",frame_tmp);
 };
 
 //Detect circles using haar transform
@@ -373,7 +404,7 @@ void houghCircles(Mat frame){
   GaussianBlur( frame_gray, frame_gray, Size(9, 9), 2, 2 );
 
   // Apply the Hough Transform to find the circles
-  HoughCircles( frame_gray, circles, CV_HOUGH_GRADIENT, 1, frame_gray.rows/8, 200, 50, 0, 0 );
+  HoughCircles( frame_gray, circles, CV_HOUGH_GRADIENT, 1, frame_gray.rows/2, 170, 20, 0, 0 );
 
   //Draw the detected features
   Mat frame_tmp =frame.clone(); //make a copy of the original
@@ -389,7 +420,7 @@ void houghCircles(Mat frame){
   }
 
   //Display results
-  imshow((string)"dartCH",frame_tmp);
+  //imshow((string)"dartCH",frame_tmp);
 };
 
 //Find lines
@@ -397,7 +428,7 @@ void houghLines(Mat frame){
 
   //Preprocessing
   Mat canny_output, frame_gray;
-  Canny(frame, canny_output, 50, 150, 3);
+  Canny(frame, canny_output, 60, 180, 3);
   cvtColor(canny_output, frame_gray, CV_GRAY2BGR);
 
   //Apply transform
@@ -416,7 +447,7 @@ void houghLines(Mat frame){
     line(frame_gray, Point(l[0], l[1]), Point(l[2], l[3]), Scalar(0,0,255), 3, CV_AA);
   }
  
-  imshow("detected lines", frame_gray);
+  //imshow("detected lines", frame_gray);
 };
 
 //Find all contours
